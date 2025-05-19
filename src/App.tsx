@@ -31,6 +31,8 @@ function App() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isRegistering, setIsRegistering] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [session, setSession] = useState<any>(null)
   const [resetSession, setResetSession] = useState(false)
@@ -184,7 +186,46 @@ function App() {
   // Toggle between login and registration forms
   const toggleAuthMode = () => {
     setIsRegistering(!isRegistering)
+    setIsResetting(false)
+    setResetSent(false)
     setLoginError('')
+  }
+  
+  // Toggle password reset mode
+  const toggleResetMode = () => {
+    setIsResetting(!isResetting)
+    setIsRegistering(false)
+    setResetSent(false)
+    setLoginError('')
+  }
+  
+  // Handle password reset
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!email) {
+      setLoginError('Please enter your email address')
+      return
+    }
+    
+    try {
+      setLoading(true)
+      setLoginError('')
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      })
+      
+      if (error) {
+        throw error
+      }
+      
+      setResetSent(true)
+    } catch (error: any) {
+      setLoginError(error.message || 'Failed to send reset email')
+    } finally {
+      setLoading(false)
+    }
   }
   
   // Handle logout
@@ -257,7 +298,9 @@ function App() {
         <div className="auth-container">
           <WaterBarLogo />
           <div className="card auth-card">
-            <h2 className="auth-title">{isRegistering ? 'Create an Account' : 'Login to The Water Bar'}</h2>
+            <h2 className="auth-title">
+              {isRegistering ? 'Create an Account' : isResetting ? 'Reset Password' : 'Login to The Water Bar'}
+            </h2>
             
             {loginError && (
               <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', textAlign: 'center' }}>
@@ -265,7 +308,13 @@ function App() {
               </div>
             )}
             
-            <form onSubmit={isRegistering ? handleRegistration : handleLogin}>
+            {resetSent && (
+              <div className="success-message" style={{ color: 'var(--success, #28a745)', marginBottom: '1rem', textAlign: 'center' }}>
+                Password reset email sent! Check your inbox.
+              </div>
+            )}
+            
+            <form onSubmit={isRegistering ? handleRegistration : isResetting ? handleResetPassword : handleLogin}>
               <div className="form-group">
                 <label htmlFor="email">Email</label>
                 <input
@@ -278,49 +327,51 @@ function App() {
                 />
               </div>
               
-              <div className="form-group">
-                <label htmlFor="password">Password</label>
-                <div className="password-input-container" style={{ position: 'relative' }}>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    disabled={loading}
-                  />
-                  <button 
-                    type="button" 
-                    className="password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '5px',
-                      boxShadow: 'none',
-                      color: '#666'
-                    }}
-                  >
-                    {showPassword ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </button>
+              {!isResetting && (
+                <div className="form-group">
+                  <label htmlFor="password">Password</label>
+                  <div className="password-input-container" style={{ position: 'relative' }}>
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      disabled={loading}
+                    />
+                    <button 
+                      type="button" 
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '5px',
+                        boxShadow: 'none',
+                        color: '#666'
+                      }}
+                    >
+                      {showPassword ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
               
               {isRegistering && (
                 <div className="form-group">
@@ -334,6 +385,36 @@ function App() {
                       placeholder="••••••••"
                       disabled={loading}
                     />
+                    <button 
+                      type="button" 
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '5px',
+                        boxShadow: 'none',
+                        color: '#666'
+                      }}
+                    >
+                      {showPassword ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
@@ -344,20 +425,33 @@ function App() {
                 style={{ width: '100%', marginBottom: '1rem' }}
               >
                 {loading ? 
-                  (isRegistering ? 'Creating Account...' : 'Signing In...') : 
-                  (isRegistering ? 'Create Account' : 'Sign In')
+                  (isRegistering ? 'Creating Account...' : isResetting ? 'Sending Reset Link...' : 'Signing In...') : 
+                  (isRegistering ? 'Create Account' : isResetting ? 'Send Reset Link' : 'Sign In')
                 }
               </button>
               
-              <div style={{ textAlign: 'center' }}>
-                <button 
-                  type="button"
-                  onClick={toggleAuthMode}
-                  className="text"
-                  style={{ boxShadow: 'none', padding: '10px' }}
-                >
-                  {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-                </button>
+              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {!isResetting && (
+                  <button 
+                    type="button"
+                    onClick={toggleAuthMode}
+                    className="text"
+                    style={{ boxShadow: 'none', padding: '5px' }}
+                  >
+                    {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+                  </button>
+                )}
+                
+                {!isRegistering && (
+                  <button 
+                    type="button"
+                    onClick={toggleResetMode}
+                    className="text"
+                    style={{ boxShadow: 'none', padding: '5px' }}
+                  >
+                    {isResetting ? 'Back to Login' : 'Forgot password?'}
+                  </button>
+                )}
               </div>
             </form>
           </div>
