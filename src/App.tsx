@@ -28,7 +28,9 @@ function App() {
   const [loadingSession, setLoadingSession] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [isRegistering, setIsRegistering] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [session, setSession] = useState<any>(null)
   const [resetSession, setResetSession] = useState(false)
@@ -126,6 +128,65 @@ function App() {
     }
   }
   
+  // Handle registration
+  const handleRegistration = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!email || !password) {
+      setLoginError('Please enter both email and password')
+      return
+    }
+    
+    if (password !== confirmPassword) {
+      setLoginError('Passwords do not match')
+      return
+    }
+    
+    if (password.length < 6) {
+      setLoginError('Password must be at least 6 characters')
+      return
+    }
+    
+    try {
+      setLoading(true)
+      setLoginError('')
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            weight_kg: 70 // Default weight, can be updated later
+          }
+        }
+      })
+      
+      if (error) {
+        throw error
+      }
+      
+      if (data.user?.identities?.length === 0) {
+        setLoginError('This email is already registered. Please sign in instead.')
+        return
+      }
+      
+      // On successful registration
+      setIsRegistering(false)
+      setLoginError('')
+      alert('Registration successful! Please check your email to verify your account.')
+    } catch (error: any) {
+      setLoginError(error.message || 'Registration failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  // Toggle between login and registration forms
+  const toggleAuthMode = () => {
+    setIsRegistering(!isRegistering)
+    setLoginError('')
+  }
+  
   // Handle logout
   const handleLogout = async () => {
     try {
@@ -189,14 +250,14 @@ function App() {
     }
   }
   
-  // Login form
+  // Login/Registration form
   if (!session) {
     return (
       <div className="container">
         <div className="auth-container">
           <WaterBarLogo />
           <div className="card auth-card">
-            <h2 className="auth-title">Login to The Water Bar</h2>
+            <h2 className="auth-title">{isRegistering ? 'Create an Account' : 'Login to The Water Bar'}</h2>
             
             {loginError && (
               <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', textAlign: 'center' }}>
@@ -204,7 +265,7 @@ function App() {
               </div>
             )}
             
-            <form onSubmit={handleLogin}>
+            <form onSubmit={isRegistering ? handleRegistration : handleLogin}>
               <div className="form-group">
                 <label htmlFor="email">Email</label>
                 <input
@@ -261,13 +322,43 @@ function App() {
                 </div>
               </div>
               
+              {isRegistering && (
+                <div className="form-group">
+                  <label htmlFor="confirmPassword">Confirm Password</label>
+                  <div className="password-input-container" style={{ position: 'relative' }}>
+                    <input
+                      id="confirmPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              )}
+              
               <button 
                 type="submit" 
                 disabled={loading}
-                style={{ width: '100%' }}
+                style={{ width: '100%', marginBottom: '1rem' }}
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? 
+                  (isRegistering ? 'Creating Account...' : 'Signing In...') : 
+                  (isRegistering ? 'Create Account' : 'Sign In')
+                }
               </button>
+              
+              <div style={{ textAlign: 'center' }}>
+                <button 
+                  type="button"
+                  onClick={toggleAuthMode}
+                  className="text"
+                  style={{ boxShadow: 'none', padding: '10px' }}
+                >
+                  {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
