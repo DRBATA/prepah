@@ -1,5 +1,6 @@
 // api/migrate-users.ts
 import { createClient } from '@supabase/supabase-js';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Initialize with service role key using your existing env variable names
 const supabase = createClient(
@@ -7,7 +8,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export default async function handler(req, res) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // 1. Get all unique emails and weights from hydration_plan
     const { data: uniqueUsers, error: queryError } = await supabase
@@ -58,19 +59,13 @@ export default async function handler(req, res) {
       });
     }
     
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: `Processed ${results.length} users`,
-        results
-      })
-    };
+    res.status(200).json({
+      message: `Processed ${results.length} users`,
+      results
+    });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Migration error:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
+    res.status(500).json({ error: error.message });
   }
 }
