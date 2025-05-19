@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function handler(req, res) {
+export default async function handler(req, res) {
   try {
     // 1. Get all unique emails and weights from hydration_plan
     const { data: uniqueUsers, error: queryError } = await supabase
