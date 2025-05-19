@@ -33,6 +33,9 @@ function App() {
   const [isRegistering, setIsRegistering] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [changeSuccess, setChangeSuccess] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [session, setSession] = useState<any>(null)
   const [resetSession, setResetSession] = useState(false)
@@ -291,6 +294,66 @@ function App() {
     }
   }
   
+  // Handle password change for logged-in users
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!password || !newPassword || !confirmPassword) {
+      setLoginError('Please fill in all password fields')
+      return
+    }
+    
+    if (newPassword !== confirmPassword) {
+      setLoginError('New passwords do not match')
+      return
+    }
+    
+    if (newPassword.length < 6) {
+      setLoginError('New password must be at least 6 characters')
+      return
+    }
+    
+    try {
+      setLoading(true)
+      setLoginError('')
+      
+      // First verify current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: session?.user?.email || '',
+        password
+      })
+      
+      if (signInError) {
+        setLoginError('Current password is incorrect')
+        setLoading(false)
+        return
+      }
+      
+      // Then update to new password
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+      
+      if (error) {
+        throw error
+      }
+      
+      // Success
+      setChangeSuccess(true)
+      setPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => {
+        setIsChangingPassword(false)
+        setChangeSuccess(false)
+      }, 3000)
+    } catch (error: any) {
+      setLoginError(error.message || 'Failed to change password')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
   // Login/Registration form
   if (!session) {
     return (
@@ -485,11 +548,179 @@ function App() {
             </p>
           </div>
           
+          <button 
+            onClick={() => setIsChangingPassword(!isChangingPassword)} 
+            className="text" 
+            style={{ marginRight: '10px' }}
+          >
+            {isChangingPassword ? 'Cancel' : 'Change Password'}
+          </button>
+          
           <button onClick={handleLogout} className="text">
             Sign Out
           </button>
         </div>
       </header>
+      
+      {isChangingPassword && (
+        <div className="card" style={{ maxWidth: '500px', margin: '20px auto 30px' }}>
+          <h2 className="auth-title">Change Password</h2>
+          
+          {loginError && (
+            <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', textAlign: 'center' }}>
+              {loginError}
+            </div>
+          )}
+          
+          {changeSuccess && (
+            <div className="success-message" style={{ color: 'var(--success, #28a745)', marginBottom: '1rem', textAlign: 'center' }}>
+              Password changed successfully!
+            </div>
+          )}
+          
+          <form onSubmit={handlePasswordChange}>
+            <div className="form-group">
+              <label htmlFor="currentPassword">Current Password</label>
+              <div className="password-input-container" style={{ position: 'relative' }}>
+                <input
+                  id="currentPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+                <button 
+                  type="button" 
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '5px',
+                    boxShadow: 'none',
+                    color: '#666'
+                  }}
+                >
+                  {showPassword ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="newPassword">New Password</label>
+              <div className="password-input-container" style={{ position: 'relative' }}>
+                <input
+                  id="newPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+                <button 
+                  type="button" 
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '5px',
+                    boxShadow: 'none',
+                    color: '#666'
+                  }}
+                >
+                  {showPassword ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="confirmNewPassword">Confirm New Password</label>
+              <div className="password-input-container" style={{ position: 'relative' }}>
+                <input
+                  id="confirmNewPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+                <button 
+                  type="button" 
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '5px',
+                    boxShadow: 'none',
+                    color: '#666'
+                  }}
+                >
+                  {showPassword ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            <button 
+              type="submit" 
+              disabled={loading}
+              style={{ width: '100%' }}
+            >
+              {loading ? 'Changing Password...' : 'Change Password'}
+            </button>
+          </form>
+        </div>
+      )}
       
       <div className="flex gap-2" style={{ marginBottom: '1.5rem' }}>
         <button 
