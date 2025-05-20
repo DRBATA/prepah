@@ -124,11 +124,6 @@ function App() {
     
     window.addEventListener('beforeunload', handleBeforeUnload);
     
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }
-    
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === 'SIGNED_IN' && newSession) {
@@ -152,7 +147,11 @@ function App() {
     
     checkForRecovery();
     
-    return () => subscription.unsubscribe();
+    // Return a cleanup function that removes event listeners and unsubscribes
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      subscription.unsubscribe();
+    };
   }, []);
   
   // Authentication handlers
