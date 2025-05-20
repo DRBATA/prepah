@@ -1,567 +1,498 @@
-import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import './styles.css'
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import './styles.css';
 
-// Water Bar logo as SVG component
-function WaterBarLogo() {
-  return (
-    <svg width="180" height="60" viewBox="0 0 180 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20 10L25 45L30 10H40L45 45L50 10H60L50 50H40L35 15L30 50H20L10 10H20Z" fill="#22B8CF"/>
-      <path d="M70 10H80V30C80 35 82.5 40 90 40C97.5 40 100 35 100 30V10H110V30C110 40 105 50 90 50C75 50 70 40 70 30V10Z" fill="#6741D9"/>
-      <path d="M120 10H150V20H130V25H145V35H130V40H150V50H120V10Z" fill="#22B8CF"/>
-      <circle cx="160" cy="25" r="10" fill="#22B8CF" fillOpacity="0.7"/>
-      <circle cx="170" cy="15" r="5" fill="#6741D9" fillOpacity="0.7"/>
-    </svg>
-  )
-}
+// Import our components
+import { LoginForm, RegisterForm, ResetPasswordForm, UpdatePasswordForm, WaterBarLogo } from './components/AuthComponents';
+import NavBar, { ViewTabs } from './components/NavBar';
+import LogsView from './components/views/LogsView';
+import RecommendationsView from './components/views/RecommendationsView';
+import ActionsView from './components/views/ActionsView';
+
+// Import API client
+import { fetchHydrationData, logHydration, fetchRecommendations, selectRecommendation, completeAction } from './api/api-client';
 
 // Initialize Supabase client
-const supabaseUrl = "https://hmwrlhepsmyvqwkfleck.supabase.co"
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc"
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hmwrlhepsmyvqwkfleck.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc";
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function App() {
-  // State management
-  const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<Array<{content: string, type: 'user' | 'bot'}>>([])  
-  const [loading, setLoading] = useState(false)
-  const [loadingSession, setLoadingSession] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isRegistering, setIsRegistering] = useState(false)
-  const [isResetting, setIsResetting] = useState(false)
-  const [resetSent, setResetSent] = useState(false)
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [changeSuccess, setChangeSuccess] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [session, setSession] = useState<any>(null)
-  const [resetSession, setResetSession] = useState(false)
-  const [loginError, setLoginError] = useState('')
-  const [hydrationData, setHydrationData] = useState<any>(null)
-  const [view, setView] = useState<'chat' | 'dashboard'>('chat')
+  // Authentication state
+  const [loading, setLoading] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<any>(null);
+  const [loginError, setLoginError] = useState('');
   
+  // Authentication view state
+  const [authView, setAuthView] = useState<'sign_in' | 'sign_up' | 'forgotten_password' | 'update_password'>('sign_in');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [changeSuccess, setChangeSuccess] = useState(false);
+  
+  // Main app state
+  const [view, setView] = useState<'logs' | 'recommendations' | 'actions'>('logs');
+  const [hydrationData, setHydrationData] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [selectedActions, setSelectedActions] = useState<any[]>([]);
+  const [previousResponseId, setPreviousResponseId] = useState<string | undefined>(undefined);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [nearbyVenues, setNearbyVenues] = useState<any[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<any[]>([]);
+  const [userPoints, setUserPoints] = useState(0);
+
   // Handle session management
   useEffect(() => {
-    // Check for existing session
-    const getSession = async () => {
-      try {
-        setLoadingSession(true)
-        const { data, error } = await supabase.auth.getSession()
-        
-        if (data.session) {
-          setSession(data.session)
-          setUser(data.session.user)
-          fetchDashboardData(data.session)
-        }
-      } catch (error) {
-        console.error('Error getting session:', error)
-      } finally {
-        setLoadingSession(false)
+    async function getSession() {
+      setLoadingSession(true);
+      
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error getting session:', error.message);
+        setLoadingSession(false);
+        return;
       }
+      
+      if (data?.session) {
+        setSession(data.session);
+        setUser(data.session.user);
+        
+        // Fetch initial hydration data
+        try {
+          const hydrationResponse = await fetchHydrationData(data.session.access_token);
+          setHydrationData(hydrationResponse);
+          setPreviousResponseId(hydrationResponse.response_id);
+          setSessionId(hydrationResponse.session_id);
+          
+          // For demo purposes, set some sample data
+          setUserPoints(750);
+          setNearbyVenues([
+            {
+              id: 'venue_1',
+              name: 'The Water Bar',
+              type: 'Hydration Station',
+              rating: 4.8,
+              distance: '500m'
+            },
+            {
+              id: 'venue_2',
+              name: 'Hydration Hub',
+              type: 'Wellness Café',
+              rating: 4.5,
+              distance: '800m'
+            }
+          ]);
+          setRecommendedProducts([
+            {
+              id: 'product_1',
+              name: 'Premium Mineral Water',
+              brand: 'Perrier',
+              price: 15,
+              points: 15,
+              description: 'Naturally carbonated mineral water with a refreshing taste.'
+            },
+            {
+              id: 'product_2',
+              name: 'Hydration Bundle',
+              brand: 'Water Bar',
+              price: 60,
+              points: 75,
+              description: 'Complete hydration pack with water, electrolytes, and protein.'
+            }
+          ]);
+        } catch (error) {
+          console.error('Error fetching initial data:', error);
+        }
+      }
+      
+      setLoadingSession(false);
     }
     
-    getSession()
+    getSession();
     
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-      setUser(newSession?.user || null)
-      
-      if (newSession) {
-        fetchDashboardData(newSession)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'SIGNED_IN' && newSession) {
+        setSession(newSession);
+        setUser(newSession.user);
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+        setHydrationData(null);
       }
-    })
+    });
     
-    return () => subscription.unsubscribe()
-  }, [])
-  
-  // Fetch dashboard data
-  const fetchDashboardData = async (currentSession: any) => {
-    if (!currentSession?.access_token) return
-    
-    try {
-      const result = await fetch('/api/dashboard', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentSession.access_token}`
-        },
-        body: JSON.stringify({})
-      })
+    // Check URL for reset password params
+    async function checkForRecovery() {
+      const hash = window.location.hash;
       
-      const data = await result.json()
-      
-      if (!data.error) {
-        setHydrationData(data)
+      if (hash && hash.substring(1).includes('type=recovery')) {
+        setAuthView('update_password');
       }
-    } catch (error) {
-      console.error('Error fetching dashboard:', error)
-    }
-  }
-  
-  // Handle login
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!email || !password) {
-      setLoginError('Please enter both email and password')
-      return
     }
     
+    checkForRecovery();
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // Authentication handlers
+  const handleLogin = async (email: string, password: string) => {
     try {
-      setLoading(true)
-      setLoginError('')
+      setLoading(true);
+      setLoginError('');
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
-      })
+      });
       
       if (error) {
-        throw error
+        setLoginError(error.message);
+        return;
       }
       
-      setSession(data.session)
-      setUser(data.user)
-    } catch (error: any) {
-      setLoginError(error.message || 'Login failed')
+      // Success - session will be set by onAuthStateChange
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError('An unexpected error occurred');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
   
-  // Handle registration
-  const handleRegistration = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!email || !password) {
-      setLoginError('Please enter both email and password')
-      return
-    }
-    
+  const handleRegistration = async (email: string, password: string, confirmPassword: string) => {
     if (password !== confirmPassword) {
-      setLoginError('Passwords do not match')
-      return
-    }
-    
-    if (password.length < 6) {
-      setLoginError('Password must be at least 6 characters')
-      return
+      setLoginError("Passwords don't match");
+      return;
     }
     
     try {
-      setLoading(true)
-      setLoginError('')
+      setLoading(true);
+      setLoginError('');
       
       const { data, error } = await supabase.auth.signUp({
         email,
-        password,
-        options: {
-          data: {
-            weight_kg: 70 // Default weight, can be updated later
-          }
-        }
-      })
+        password
+      });
       
       if (error) {
-        throw error
+        setLoginError(error.message);
+        return;
       }
       
-      if (data.user?.identities?.length === 0) {
-        setLoginError('This email is already registered. Please sign in instead.')
-        return
+      // Check if email confirmation is required
+      if (data?.user?.identities?.length === 0) {
+        setLoginError('This email is already registered');
+        return;
       }
       
-      // On successful registration
-      setIsRegistering(false)
-      setLoginError('')
-      alert('Registration successful! Please check your email to verify your account.')
-    } catch (error: any) {
-      setLoginError(error.message || 'Registration failed')
+      // Success - either logged in or confirmation email sent
+      if (data?.user?.confirmed_at) {
+        // User is confirmed, session will be set by onAuthStateChange
+      } else {
+        setLoginError('Please check your email for confirmation link');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setLoginError('An unexpected error occurred');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
   
-  // Toggle between login and registration forms
-  const toggleAuthMode = () => {
-    setIsRegistering(!isRegistering)
-    setIsResetting(false)
-    setResetSent(false)
-    setLoginError('')
-  }
-  
-  // Toggle password reset mode
-  const toggleResetMode = () => {
-    setIsResetting(!isResetting)
-    setIsRegistering(false)
-    setResetSent(false)
-    setLoginError('')
-  }
-  
-  // Handle password reset
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!email) {
-      setLoginError('Please enter your email address')
-      return
-    }
-    
+  const handleResetPassword = async (email: string) => {
     try {
-      setLoading(true)
-      setLoginError('')
+      setLoading(true);
+      setLoginError('');
       
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
-      })
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email);
       
       if (error) {
-        throw error
+        setLoginError(error.message);
+        return;
       }
       
-      setResetSent(true)
-    } catch (error: any) {
-      setLoginError(error.message || 'Failed to send reset email')
+      // Success - reset email sent
+      setResetSent(true);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setLoginError('An unexpected error occurred');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
   
-  // Handle logout
+  const handleUpdatePassword = async (password: string) => {
+    try {
+      setLoading(true);
+      setLoginError('');
+      
+      const { data, error } = await supabase.auth.updateUser({
+        password
+      });
+      
+      if (error) {
+        setLoginError(error.message);
+        return;
+      }
+      
+      // Success - password updated
+      setAuthView('sign_in');
+    } catch (error) {
+      console.error('Password update error:', error);
+      setLoginError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut()
-      setMessages([])
-      setHydrationData(null)
+      await supabase.auth.signOut();
+      // Session will be cleared by onAuthStateChange
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('Logout error:', error);
     }
-  }
+  };
   
-  // Handle message submission
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!input || !session) return
-    
-    // Add user message to chat
-    const userMessage = { content: input, type: 'user' as const }
-    setMessages(prev => [...prev, userMessage])
-    
-    setLoading(true)
-    setInput('')
-    
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
     try {
-      // Call the API with auth token
-      const result = await fetch('/api/pure-responses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          message: input,
-          resetSession: resetSession
-        })
-      })
+      setLoading(true);
+      setLoginError('');
       
-      const data = await result.json()
-      
-      // Add bot message to chat
-      if (data.error) {
-        setMessages(prev => [...prev, { content: `Error: ${data.error}`, type: 'bot' }])
-      } else if (data.message) {
-        setMessages(prev => [...prev, { content: data.message, type: 'bot' }])
-        // Update dashboard data after bot response
-        fetchDashboardData(session)
-      } else {
-        setMessages(prev => [...prev, { content: 'Sorry, I could not process your request.', type: 'bot' }])
-      }
-      
-      // Reset the resetSession flag after use
-      if (resetSession) {
-        setResetSession(false)
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      setMessages(prev => [...prev, { content: `Error: ${errorMessage}`, type: 'bot' }])
-    } finally {
-      setLoading(false)
-    }
-  }
-  
-  // Handle password change for logged-in users
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!password || !newPassword || !confirmPassword) {
-      setLoginError('Please fill in all password fields')
-      return
-    }
-    
-    if (newPassword !== confirmPassword) {
-      setLoginError('New passwords do not match')
-      return
-    }
-    
-    if (newPassword.length < 6) {
-      setLoginError('New password must be at least 6 characters')
-      return
-    }
-    
-    try {
-      setLoading(true)
-      setLoginError('')
-      
-      // First verify current password
+      // First sign in to verify current password
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: session?.user?.email || '',
-        password
-      })
+        email: user.email,
+        password: currentPassword
+      });
       
       if (signInError) {
-        setLoginError('Current password is incorrect')
-        setLoading(false)
-        return
+        setLoginError('Current password is incorrect');
+        setLoading(false);
+        return;
       }
       
-      // Then update to new password
-      const { error } = await supabase.auth.updateUser({
+      // Then update password
+      const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword
-      })
+      });
       
-      if (error) {
-        throw error
+      if (updateError) {
+        setLoginError(updateError.message);
+        setLoading(false);
+        return;
       }
       
-      // Success
-      setChangeSuccess(true)
-      setPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
+      // Success - password updated
+      setChangeSuccess(true);
       setTimeout(() => {
-        setIsChangingPassword(false)
-        setChangeSuccess(false)
-      }, 3000)
-    } catch (error: any) {
-      setLoginError(error.message || 'Failed to change password')
+        setIsChangingPassword(false);
+        setChangeSuccess(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Password change error:', error);
+      setLoginError('An unexpected error occurred');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
   
-  // Login/Registration form
+  // View toggle handlers
+  const handleViewChange = (newView: 'logs' | 'recommendations' | 'actions') => {
+    setView(newView);
+    
+    // Fetch data for the selected view
+    if (newView === 'recommendations' && session) {
+      fetchRecommendations(session.access_token, previousResponseId || undefined, sessionId || undefined)
+        .then(data => {
+          setRecommendations(data.recommendations || []);
+          setPreviousResponseId(data.response_id);
+        })
+        .catch(error => console.error('Error fetching recommendations:', error));
+    }
+  };
+  
+  // Action handlers
+  const handleLogHydration = async (amount: number, type: string) => {
+    if (!session) return;
+    
+    try {
+      const response = await logHydration(
+        session.access_token, 
+        amount, 
+        type, 
+        previousResponseId || undefined, 
+        sessionId || undefined
+      );
+      
+      setHydrationData(response);
+      setPreviousResponseId(response.response_id);
+    } catch (error) {
+      console.error('Error logging hydration:', error);
+    }
+  };
+  
+  const handleLogActivity = async (activity: string, duration: number) => {
+    // Similar to handleLogHydration but for activities
+    console.log(`Logging activity: ${activity} for ${duration} minutes`);
+  };
+  
+  const handleSelectRecommendation = async (recommendation: any) => {
+    if (!session) return;
+    
+    try {
+      const response = await selectRecommendation(
+        session.access_token,
+        recommendation.id,
+        previousResponseId || undefined,
+        sessionId || undefined
+      );
+      
+      // Add the selected recommendation to the actions
+      setSelectedActions(prev => [...prev, {
+        ...recommendation,
+        completed: false
+      }]);
+      
+      setPreviousResponseId(response.response_id);
+      
+      // Automatically switch to the actions view
+      setView('actions');
+    } catch (error) {
+      console.error('Error selecting recommendation:', error);
+    }
+  };
+  
+  const handleCompleteAction = async (actionId: string) => {
+    if (!session) return;
+    
+    try {
+      const response = await completeAction(
+        session.access_token,
+        actionId,
+        previousResponseId || undefined,
+        sessionId || undefined
+      );
+      
+      // Mark the action as completed
+      setSelectedActions(prev => prev.map(action => 
+        action.id === actionId ? { ...action, completed: true } : action
+      ));
+      
+      // Update hydration data
+      setHydrationData(response.hydrationData || hydrationData);
+      setPreviousResponseId(response.response_id);
+    } catch (error) {
+      console.error('Error completing action:', error);
+    }
+  };
+  
+  const handlePurchaseProduct = async (productId: string) => {
+    // In a real app, this would process the purchase
+    console.log(`Purchasing product: ${productId}`);
+    
+    // For demo purposes, just add it to selected actions
+    const product = recommendedProducts.find(p => p.id === productId);
+    if (product) {
+      setSelectedActions(prev => [...prev, {
+        id: `action_${Date.now()}`,
+        type: 'buy_product',
+        title: `Buy ${product.name}`,
+        description: product.description,
+        price: product.price,
+        points: product.points,
+        completed: false
+      }]);
+    }
+  };
+  
+  // Login/Registration view
   if (!session) {
+    if (authView === 'update_password') {
+      return (
+        <div className="container">
+          <div className="auth-container">
+            <WaterBarLogo />
+            <UpdatePasswordForm 
+              onUpdatePassword={handleUpdatePassword}
+              error={loginError}
+            />
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="container">
         <div className="auth-container">
           <WaterBarLogo />
-          <div className="card auth-card">
-            <h2 className="auth-title">
-              {isRegistering ? 'Create an Account' : isResetting ? 'Reset Password' : 'Login to The Water Bar'}
-            </h2>
-            
-            {loginError && (
-              <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', textAlign: 'center' }}>
-                {loginError}
-              </div>
-            )}
-            
-            {resetSent && (
-              <div className="success-message" style={{ color: 'var(--success, #28a745)', marginBottom: '1rem', textAlign: 'center' }}>
-                Password reset email sent! Check your inbox.
-              </div>
-            )}
-            
-            <form onSubmit={isRegistering ? handleRegistration : isResetting ? handleResetPassword : handleLogin}>
-              <div className="form-group">
-                <label htmlFor="email">Email</label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your.email@example.com"
-                  disabled={loading}
-                />
-              </div>
-              
-              {!isResetting && (
-                <div className="form-group">
-                  <label htmlFor="password">Password</label>
-                  <div className="password-input-container" style={{ position: 'relative' }}>
-                    <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      disabled={loading}
-                    />
-                    <button 
-                      type="button" 
-                      className="password-toggle"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '10px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '5px',
-                        boxShadow: 'none',
-                        color: '#666'
-                      }}
-                    >
-                      {showPassword ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {isRegistering && (
-                <div className="form-group">
-                  <label htmlFor="confirmPassword">Confirm Password</label>
-                  <div className="password-input-container" style={{ position: 'relative' }}>
-                    <input
-                      id="confirmPassword"
-                      type={showPassword ? 'text' : 'password'}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="••••••••"
-                      disabled={loading}
-                    />
-                    <button 
-                      type="button" 
-                      className="password-toggle"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '10px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '5px',
-                        boxShadow: 'none',
-                        color: '#666'
-                      }}
-                    >
-                      {showPassword ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              <button 
-                type="submit" 
-                disabled={loading}
-                style={{ width: '100%', marginBottom: '1rem' }}
-              >
-                {loading ? 
-                  (isRegistering ? 'Creating Account...' : isResetting ? 'Sending Reset Link...' : 'Signing In...') : 
-                  (isRegistering ? 'Create Account' : isResetting ? 'Send Reset Link' : 'Sign In')
-                }
-              </button>
-              
-              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {!isResetting && (
-                  <button 
-                    type="button"
-                    onClick={toggleAuthMode}
-                    className="text"
-                    style={{ boxShadow: 'none', padding: '5px' }}
-                  >
-                    {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-                  </button>
-                )}
-                
-                {!isRegistering && (
-                  <button 
-                    type="button"
-                    onClick={toggleResetMode}
-                    className="text"
-                    style={{ boxShadow: 'none', padding: '5px' }}
-                  >
-                    {isResetting ? 'Back to Login' : 'Forgot password?'}
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
+          
+          {isRegistering ? (
+            <RegisterForm 
+              onRegister={handleRegistration}
+              onToggleLogin={() => {
+                setIsRegistering(false);
+                setLoginError('');
+              }}
+              error={loginError}
+            />
+          ) : isResetting ? (
+            <ResetPasswordForm 
+              onReset={handleResetPassword}
+              onToggleLogin={() => {
+                setIsResetting(false);
+                setResetSent(false);
+                setLoginError('');
+              }}
+              resetSent={resetSent}
+              error={loginError}
+            />
+          ) : (
+            <LoginForm 
+              onLogin={handleLogin}
+              onToggleRegister={() => {
+                setIsRegistering(true);
+                setLoginError('');
+              }}
+              onToggleReset={() => {
+                setIsResetting(true);
+                setLoginError('');
+              }}
+              error={loginError}
+            />
+          )}
         </div>
       </div>
-    )
+    );
   }
   
   // Loading state
   if (loadingSession) {
     return (
-      <div className="container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div className="card">
-          <h2>Loading your hydration data...</h2>
-        </div>
+      <div className="loading-container">
+        <div className="spinner"></div>
+        <p>Loading your hydration data...</p>
       </div>
-    )
+    );
   }
   
-  // Main application
+  // Main application view
   return (
     <div className="container">
-      <header className="flex justify-between items-center" style={{ padding: '1rem 0' }}>
-        <WaterBarLogo />
-        
-        <div className="flex gap-4 items-center">
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ margin: 0, fontWeight: 'bold' }}>{user?.email}</p>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-              {hydrationData?.sessionId ? 'Session active' : 'No active session'}
-            </p>
-          </div>
-          
-          <button 
-            onClick={() => setIsChangingPassword(!isChangingPassword)} 
-            className="text" 
-            style={{ marginRight: '10px' }}
-          >
-            {isChangingPassword ? 'Cancel' : 'Change Password'}
-          </button>
-          
-          <button onClick={handleLogout} className="text">
-            Sign Out
-          </button>
-        </div>
-      </header>
+      <NavBar 
+        currentView={view}
+        onChangeView={handleViewChange}
+        onLogout={handleLogout}
+        onChangePassword={() => setIsChangingPassword(!isChangingPassword)}
+        userEmail={user?.email}
+      />
       
+      {/* Password Change Form */}
       {isChangingPassword && (
         <div className="card" style={{ maxWidth: '500px', margin: '20px auto 30px' }}>
           <h2 className="auth-title">Change Password</h2>
@@ -573,321 +504,105 @@ function App() {
           )}
           
           {changeSuccess && (
-            <div className="success-message" style={{ color: 'var(--success, #28a745)', marginBottom: '1rem', textAlign: 'center' }}>
-              Password changed successfully!
+            <div className="success-message" style={{ color: 'var(--success)', marginBottom: '1rem', textAlign: 'center' }}>
+              Password updated successfully!
             </div>
           )}
           
-          <form onSubmit={handlePasswordChange}>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const currentPassword = (e.target as any).currentPassword.value;
+            const newPassword = (e.target as any).newPassword.value;
+            const confirmNewPassword = (e.target as any).confirmNewPassword.value;
+            
+            if (newPassword !== confirmNewPassword) {
+              setLoginError("New passwords don't match");
+              return;
+            }
+            
+            handleChangePassword(currentPassword, newPassword);
+          }}>
             <div className="form-group">
               <label htmlFor="currentPassword">Current Password</label>
-              <div className="password-input-container" style={{ position: 'relative' }}>
-                <input
-                  id="currentPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
-                <button 
-                  type="button" 
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '5px',
-                    boxShadow: 'none',
-                    color: '#666'
-                  }}
-                >
-                  {showPassword ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
+              <input
+                id="currentPassword"
+                type="password"
+                required
+              />
             </div>
             
             <div className="form-group">
               <label htmlFor="newPassword">New Password</label>
-              <div className="password-input-container" style={{ position: 'relative' }}>
-                <input
-                  id="newPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
-                <button 
-                  type="button" 
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '5px',
-                    boxShadow: 'none',
-                    color: '#666'
-                  }}
-                >
-                  {showPassword ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
+              <input
+                id="newPassword"
+                type="password"
+                required
+                minLength={6}
+              />
             </div>
             
             <div className="form-group">
               <label htmlFor="confirmNewPassword">Confirm New Password</label>
-              <div className="password-input-container" style={{ position: 'relative' }}>
-                <input
-                  id="confirmNewPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
-                <button 
-                  type="button" 
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '5px',
-                    boxShadow: 'none',
-                    color: '#666'
-                  }}
-                >
-                  {showPassword ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
+              <input
+                id="confirmNewPassword"
+                type="password"
+                required
+                minLength={6}
+              />
             </div>
             
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{ width: '100%' }}
-            >
-              {loading ? 'Changing Password...' : 'Change Password'}
-            </button>
+            <div className="form-buttons">
+              <button type="button" className="button text" onClick={() => setIsChangingPassword(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="button primary" disabled={loading}>
+                {loading ? 'Updating...' : 'Update Password'}
+              </button>
+            </div>
           </form>
         </div>
       )}
       
-      <div className="flex gap-2" style={{ marginBottom: '1.5rem' }}>
-        <button 
-          className={view === 'chat' ? '' : 'text'} 
-          onClick={() => setView('chat')}
-        >
-          Hydration Coach
-        </button>
-        <button 
-          className={view === 'dashboard' ? '' : 'text'} 
-          onClick={() => setView('dashboard')}
-        >
-          Dashboard
-        </button>
-      </div>
+      {/* View Tabs */}
+      <ViewTabs 
+        currentView={view}
+        onChangeView={handleViewChange}
+      />
       
-      {/* Session info */}
-      {hydrationData && (
-        <div className="session-indicator fadeIn">
-          <div className="water-drop"></div>
-          <span>
-            Session: <span className="session-time">
-              {hydrationData.timeRemaining} remaining
-            </span>
-          </span>
-        </div>
+      {/* View Components */}
+      {view === 'logs' && (
+        <LogsView 
+          sessionId={sessionId || ''}
+          userProfile={user}
+          hydrationData={hydrationData}
+          onLogHydration={handleLogHydration}
+          onLogActivity={handleLogActivity}
+        />
       )}
       
-      {/* Dashboard View */}
-      {view === 'dashboard' && (
-        <div className="dashboard-grid fadeIn">
-          <div className="card dashboard-card">
-            <h3>Hydration Overview</h3>
-            
-            {hydrationData ? (
-              <>
-                <div style={{ marginTop: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span>Progress</span>
-                    <span style={{ fontWeight: 'bold' }}>{hydrationData.hydrationPercentage}%</span>
-                  </div>
-                  
-                  <div className="hydration-progress">
-                    <div 
-                      className="hydration-bar" 
-                      style={{ width: `${hydrationData.hydrationPercentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-                
-                <div className="stats-card">
-                  <div className="stat-item">
-                    <span className="stat-label">Recommended intake</span>
-                    <span className="stat-value">{hydrationData.recommendedIntake}ml</span>
-                  </div>
-                  
-                  <div className="stat-item">
-                    <span className="stat-label">Session start</span>
-                    <span className="stat-value">
-                      {new Date(hydrationData.sessionStarted).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                  </div>
-                  
-                  <div className="stat-item">
-                    <span className="stat-label">Session end</span>
-                    <span className="stat-value">
-                      {new Date(hydrationData.sessionEndsAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                  </div>
-                </div>
-                
-                <p style={{ marginTop: '1rem' }}>{hydrationData.todaySummary}</p>
-              </>
-            ) : (
-              <p>No dashboard data available. Start a conversation with your hydration coach.</p>
-            )}
-          </div>
-          
-          <div className="card dashboard-card">
-            <h3>Recent Activity</h3>
-            
-            {hydrationData?.recentEvents?.length > 0 ? (
-              <div style={{ marginTop: '1rem' }}>
-                {hydrationData.recentEvents.map((event: any, index: number) => (
-                  <div key={index} style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    padding: '0.75rem 0',
-                    borderBottom: index < hydrationData.recentEvents.length - 1 ? '1px solid var(--border)' : 'none'
-                  }}>
-                    <span>{event.message}</span>
-                    <span style={{ color: 'var(--text-tertiary)' }}>{event.time}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p>No recent activity. Your hydration events will appear here.</p>
-            )}
-            
-            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-              <label className="flex items-center justify-center gap-2">
-                <input 
-                  type="checkbox" 
-                  checked={resetSession} 
-                  onChange={(e) => setResetSession(e.target.checked)} 
-                /> 
-                Reset 24-hour session
-              </label>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '0.5rem' }}>
-                Check this and send a message to start a new 24-hour period
-              </p>
-            </div>
-          </div>
-        </div>
+      {view === 'recommendations' && (
+        <RecommendationsView 
+          userProfile={user}
+          hydrationData={hydrationData}
+          weatherData={{ location: 'Dubai Marina', temperature: '35°C', humidity: '65%' }}
+          recommendations={recommendations}
+          onSelectRecommendation={handleSelectRecommendation}
+        />
       )}
       
-      {/* Chat View */}
-      {view === 'chat' && (
-        <div className="card fadeIn">
-          <h3>Your Hydration Coach</h3>
-          
-          <div className="chat-container">
-            <div className="chat-messages">
-              {messages.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', margin: 'auto' }}>
-                  <p>No messages yet. Start the conversation with your hydration coach!</p>
-                </div>
-              ) : (
-                messages.map((msg, index) => (
-                  <div key={index} className={`message ${msg.type}`}>
-                    {msg.content}
-                  </div>
-                ))
-              )}
-            </div>
-            
-            <form onSubmit={handleSubmit} className="chat-input">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your hydration..."
-                disabled={loading}
-              />
-              <button type="submit" disabled={loading || !input}>
-                {loading ? 'Sending...' : 'Send'}
-              </button>
-            </form>
-          </div>
-          
-          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center' }}>
-            <label className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                checked={resetSession} 
-                onChange={(e) => setResetSession(e.target.checked)} 
-              /> 
-              Reset 24-hour session
-            </label>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginLeft: '1rem' }}>
-              Start fresh with a new hydration period
-            </p>
-          </div>
-        </div>
+      {view === 'actions' && (
+        <ActionsView 
+          userProfile={user}
+          selectedActions={selectedActions}
+          nearbyVenues={nearbyVenues}
+          recommendedProducts={recommendedProducts}
+          userPoints={userPoints}
+          onCompleteAction={handleCompleteAction}
+          onPurchaseProduct={handlePurchaseProduct}
+        />
       )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
