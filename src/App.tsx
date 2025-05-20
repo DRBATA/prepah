@@ -8,6 +8,7 @@ import NavBar, { ViewTabs } from './components/NavBar';
 import LogsView from './components/views/LogsView';
 import RecommendationsView from './components/views/RecommendationsView';
 import ActionsView from './components/views/ActionsView';
+import SessionManager from './components/SessionManager';
 
 // Import API client
 import { fetchHydrationData, logHydration, fetchRecommendations, selectRecommendation, completeAction } from './api/api-client';
@@ -595,12 +596,9 @@ function App() {
       
       {/* View Components */}
       {view === 'logs' && (
-        <LogsView 
-          sessionId={sessionId || ''}
-          userProfile={user}
-          hydrationData={hydrationData}
-          onLogHydration={handleLogHydration}
-          onLogActivity={handleLogActivity}
+        <SessionManager 
+          userId={user?.id || ''}
+          preferredCharacterType={user?.character_preference || 'type1'}
         />
       )}
       
