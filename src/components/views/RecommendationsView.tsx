@@ -13,6 +13,7 @@ interface RecommendationsViewProps {
   userProfile: any;
   hydrationData: any;
   weatherData?: any;
+  locationData?: any;
   recommendations: Recommendation[];
   onSelectRecommendation: (recommendation: Recommendation) => void;
 }
@@ -21,6 +22,7 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({
   userProfile,
   hydrationData,
   weatherData,
+  locationData,
   recommendations,
   onSelectRecommendation
 }) => {
@@ -31,11 +33,14 @@ const RecommendationsView: React.FC<RecommendationsViewProps> = ({
       {/* Environment Context */}
       <div className="environment-context">
         <div className="location">
-          {weatherData?.location || 'Dubai Marina'}
+          {locationData?.city || 'Dubai Marina'}
         </div>
         <div className="weather-info">
-          <span className="temperature">{weatherData?.temperature || '35°C'}</span>
-          <span className="humidity">{weatherData?.humidity || '65%'} Humidity</span>
+          <span className="temperature">{weatherData ? `${weatherData.temperature}°C` : '35°C'}</span>
+          <span className="humidity">{weatherData ? `${weatherData.humidity}%` : '65%'} Humidity</span>
+          {weatherData?.conditions && (
+            <span className="conditions">{weatherData.conditions}</span>
+          )}
         </div>
       </div>
       

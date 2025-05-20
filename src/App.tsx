@@ -46,27 +46,25 @@ function App() {
 
   // Handle session management
   useEffect(() => {
-    async function getSession() {
+    // Get initial session
+    const getInitialSession = async () => {
       setLoadingSession(true);
       
-      const { data, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('Error getting session:', error.message);
-        setLoadingSession(false);
-        return;
-      }
-      
-      if (data?.session) {
-        setSession(data.session);
-        setUser(data.session.user);
+      try {
+        const { data, error } = await supabase.auth.getSession();
         
-        // Fetch initial hydration data
-        try {
-          const hydrationResponse = await fetchHydrationData(data.session.access_token);
-          setHydrationData(hydrationResponse);
-          setPreviousResponseId(hydrationResponse.response_id);
-          setSessionId(hydrationResponse.session_id);
+        if (error) {
+          console.error('Error getting session:', error.message);
+        } else if (data?.session) {
+          setSession(data.session);
+          setUser(data.session.user);
+          
+          // Fetch initial hydration data
+          try {
+            const hydrationResponse = await fetchHydrationData(data.session.access_token);
+            setHydrationData(hydrationResponse);
+            setPreviousResponseId(hydrationResponse.response_id);
+            setSessionId(hydrationResponse.session_id);
           
           // For demo purposes, set some sample data
           setUserPoints(750);
@@ -104,15 +102,32 @@ function App() {
               description: 'Complete hydration pack with water, electrolytes, and protein.'
             }
           ]);
-        } catch (error) {
-          console.error('Error fetching initial data:', error);
+          } catch (error) {
+            console.error('Error fetching initial data:', error);
+          }
         }
+      } catch (error) {
+        console.error('Error in session management:', error);
+      } finally {
+        setLoadingSession(false);
       }
-      
-      setLoadingSession(false);
-    }
+    };
     
-    getSession();
+    getInitialSession();
+    
+    // Add window beforeunload event listener for auto-logout
+    const handleBeforeUnload = () => {
+      if (sessionStorage.getItem('auto-logout') === 'true') {
+        supabase.auth.signOut();
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }
     
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
@@ -141,25 +156,35 @@ function App() {
   }, []);
   
   // Authentication handlers
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (email: string, password: string, rememberMe: boolean) => {
     try {
       setLoading(true);
       setLoginError('');
       
+      // Sign in the user
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) {
-        setLoginError(error.message);
-        return;
+        throw error;
       }
       
-      // Success - session will be set by onAuthStateChange
-    } catch (error) {
-      console.error('Login error:', error);
-      setLoginError('An unexpected error occurred');
+      // If "Remember me" is not checked, we'll clear the session when the browser closes
+      if (!rememberMe) {
+        // Store this in session storage so we know to log out on window close
+        sessionStorage.setItem('auto-logout', 'true');
+      } else {
+        sessionStorage.removeItem('auto-logout');
+      }
+      
+      // Set session and user state
+      setSession(data.session);
+      setUser(data.user);
+    } catch (error: any) {
+      console.error('Error logging in:', error);
+      setLoginError(error.message || 'Error logging in');
     } finally {
       setLoading(false);
     }
@@ -454,7 +479,7 @@ function App() {
             />
           ) : (
             <LoginForm 
-              onLogin={handleLogin}
+              onLogin={(email, password, rememberMe) => handleLogin(email, password, rememberMe)}
               onToggleRegister={() => {
                 setIsRegistering(true);
                 setLoginError('');

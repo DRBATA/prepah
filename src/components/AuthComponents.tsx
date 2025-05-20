@@ -20,7 +20,7 @@ export function WaterBarLogo() {
 }
 
 interface LoginFormProps {
-  onLogin: (email: string, password: string) => Promise<void>;
+  onLogin: (email: string, password: string, rememberMe: boolean) => Promise<void>;
   onToggleRegister: () => void;
   onToggleReset: () => void;
   error: string;
@@ -35,10 +35,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onLogin(email, password);
+    await onLogin(email, password, rememberMe);
   };
 
   return (
@@ -91,6 +92,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               {showPassword ? '🔒' : '👁️'}
             </button>
           </div>
+        </div>
+        
+        <div className="form-group checkbox-group" style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+          <input
+            id="rememberMe"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            style={{ marginRight: '0.5rem' }}
+          />
+          <label htmlFor="rememberMe" style={{ fontSize: '0.9rem' }}>Remember me</label>
         </div>
         
         <button type="submit" className="button primary full-width">
