@@ -136,7 +136,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({
         .from('sessions')
         .select('*')
         .eq('user_id', userId)
-        .gte('start_time', today.toISOString())
+        .gte('start_at', today.toISOString())
         .order('created_at', { ascending: false })
         .limit(1);
         
@@ -163,8 +163,8 @@ const SessionManager: React.FC<SessionManagerProps> = ({
           .insert([
             { 
               user_id: userId,
-              start_time: new Date().toISOString(),
-              end_time: null
+              start_at: new Date().toISOString(),
+              end_at: null
             }
           ])
           .select()
@@ -205,7 +205,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({
         const baselineLoss = weight * 30; // Simple formula: ~30ml per kg body weight
         
         const now = new Date();
-        const sessionStart = new Date(session.start_time);
+        const sessionStart = new Date(session.start_at);
         const hoursElapsed = Math.max(1, (now.getTime() - sessionStart.getTime()) / (1000 * 60 * 60));
         
         // Calculate how much should have been lost by now (simple linear model)
