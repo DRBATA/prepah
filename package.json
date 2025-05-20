@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/supabase-js": "^2.49.5",
+    "lucide-react": "^0.511.0",
     "openai": "^4.100.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
