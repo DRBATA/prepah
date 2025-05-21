@@ -49,6 +49,8 @@ interface TimelineViewProps {
   onEventUpdated?: () => void;
 }
 
+// Timeline view props interface
+
 const TimelineView: React.FC<TimelineViewProps> = ({
   sessionId,
   userId,
@@ -72,9 +74,23 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // No profile-related functions needed anymore - moved to ProfileSection component  
+
   // Fetch timeline data on load
   useEffect(() => {
     fetchTimeline();
+    
+    // Add listener for timeline update events
+    const handleTimelineUpdate = () => {
+      console.log('Timeline update event received');
+      fetchTimeline();
+    };
+    
+    window.addEventListener('timelineUpdated', handleTimelineUpdate);
+    
+    return () => {
+      window.removeEventListener('timelineUpdated', handleTimelineUpdate);
+    };
   }, [sessionId, userId]);
 
   // Format time as HH:MM
@@ -237,7 +253,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
       fetchTimeline();
       
       if (onEventAdded) onEventAdded();
-
+      
       // Reset form
       setShowAddModal(false);
       setNewEventType('water');
@@ -419,65 +435,55 @@ const TimelineView: React.FC<TimelineViewProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-b from-rose-100/30 to-blue-200/30 border border-cyan-900/50 rounded-lg mb-4 overflow-hidden">
-      <div className="p-4 pb-2">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-medium">24-Hour Timeline</h3>
-          <button 
-            className="text-sm bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded-md flex items-center"
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus className="h-4 w-4 mr-1" /> Add Event
-          </button>
-        </div>
-      </div>
-      <div className="p-4 pt-0">
-        <div
-          ref={timelineRef}
-          className="relative h-[600px] border-l border-gray-700 ml-6"
-          onDragOver={handleDragOver}
-          onDrop={handleExternalDrop}
-        >
-          {/* Hour markers */}
-          {Array.from({ length: 24 }).map((_, i) => (
-            <div key={i} className="absolute left-0 flex items-center" style={{ top: `${(i / 24) * 100}%` }}>
-              <div className="w-2 h-0.5 bg-gray-700 -ml-2"></div>
-              <span className="text-xs text-gray-500 ml-2">{`${i.toString().padStart(2, "0")}:00`}</span>
-            </div>
-          ))}
-
-          {/* Current time indicator */}
-          <div
-            className="absolute left-0 right-0 flex items-center"
-            style={{
-              top: `${((currentTime.getHours() * 60 + currentTime.getMinutes()) / (24 * 60)) * 100}%`,
-              zIndex: 10,
-            }}
-          >
-            <div className="w-2 h-2 rounded-full bg-cyan-400 -ml-1"></div>
-            <div className="h-px flex-1 bg-cyan-400/50"></div>
-            <div className="bg-cyan-900/70 px-2 py-0.5 rounded text-xs text-cyan-400">{getCurrentTimeString()}</div>
+    <div className="relative">
+      {/* Timeline */}
+      <div className="bg-gradient-to-b from-rose-100/30 to-blue-200/30 border border-cyan-900/50 rounded-lg mb-4 overflow-hidden">
+        <div className="p-4 pb-2">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium">24-Hour Timeline</h3>
+            <button 
+              className="text-sm bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded-md flex items-center"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" /> Add Event
+            </button>
           </div>
+        </div>
+        <div className="p-4 pt-0">
+          <div
+            ref={timelineRef}
+            className="relative h-[600px] border-l border-gray-700 ml-6"
+            onDragOver={handleDragOver}
+            onDrop={handleExternalDrop}
+          >
+            {/* Hour markers */}
+            {Array.from({ length: 24 }).map((_, i) => (
+              <div key={i} className="absolute left-0 flex items-center" style={{ top: `${(i / 24) * 100}%` }}>
+                <div className="w-2 h-0.5 bg-gray-700 -ml-2"></div>
+                <span className="text-xs text-gray-500 ml-2">{`${i.toString().padStart(2, "0")}:00`}</span>
+              </div>
+            ))}
 
-          {/* Events */}
-          {events.map((event) => (
+            {/* Current time indicator */}
             <div
-              key={event.id}
               className="absolute left-0 right-0 flex items-center"
               style={{
-                top: `${((Number(event.time.split(":")[0]) * 60 + Number(event.time.split(":")[1])) / (24 * 60)) * 100}%`,
+                top: `${((currentTime.getHours() * 60 + currentTime.getMinutes()) / (24 * 60)) * 100}%`,
+                zIndex: 10,
               }}
             >
-              <div
-                className={`w-3 h-3 rounded-full -ml-1.5 ${event.confirmed ? "opacity-100" : "opacity-50"}`}
-                style={{ backgroundColor: event.color, boxShadow: `0 0 5px ${event.color}` }}
-              ></div>
+              <div className="w-2 h-2 rounded-full bg-cyan-400 -ml-1"></div>
+              <div className="h-px flex-1 bg-cyan-400/50"></div>
+              <div className="bg-cyan-900/70 px-2 py-0.5 rounded text-xs text-cyan-400">{getCurrentTimeString()}</div>
+            </div>
 
+            {/* Events */}
+            {events.map((event) => (
               <div
-                className={`ml-4 p-2 rounded-lg flex items-center justify-between w-full cursor-grab active:cursor-grabbing ${event.confirmed ? "opacity-100" : "opacity-70"}`}
+                key={event.id}
+                className="absolute left-0 right-0 flex items-center"
                 style={{
-                  backgroundColor: `${event.color}20`,
-                  borderLeft: `3px solid ${event.color}`,
+                  top: `${((Number(event.time.split(":")[0]) * 60 + Number(event.time.split(":")[1])) / (24 * 60)) * 100}%`,
                 }}
                 draggable
                 onDragStart={() => handleDragStart(event)}
@@ -544,7 +550,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({
           </div>
         </div>
       </div>
-
+      
+      {/* No profile edit sheet needed anymore - moved to ProfileSection component */}
+      
       {/* Add Event Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

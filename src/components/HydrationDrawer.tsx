@@ -176,25 +176,40 @@ const HydrationDrawer: React.FC<HydrationDrawerProps> = ({ sessionId, userId, on
     try {
       setLoading(true);
       
-      const { error } = await supabase
+      // Create event object
+      const newEvent = { 
+        session_id: sessionId,
+        user_id: userId,
+        event_type: item.category,
+        item_name: item.name,
+        volume_ml: item.water_ml || 0,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Insert into database
+      const { error, data } = await supabase
         .from('hydration_timeline')
-        .insert([
-          { 
-            session_id: sessionId,
-            user_id: userId,
-            event_type: item.category,
-            item_name: item.name,
-            volume_ml: item.water_ml || 0,
-            timestamp: new Date().toISOString()
-          }
-        ]);
+        .insert([newEvent])
+        .select();
       
       if (error) {
         console.error("Error logging hydration:", error);
+        // Show error in AI insights
+        setAiInsight(`Failed to log ${item.name}. Please try again.`);
+      } else {
+        // Success feedback
+        setAiInsight(`Successfully added ${item.name} (${item.water_ml}ml) to your hydration timeline!`);
+        
+        // Refresh the timeline data by triggering a custom event
+        const refreshEvent = new CustomEvent('timelineUpdated', { 
+          detail: { newItem: data?.[0] || newEvent }
+        });
+        window.dispatchEvent(refreshEvent);
       }
       
     } catch (error) {
       console.error("Error in logHydrationDirectly:", error);
+      setAiInsight(`An error occurred. Please try again.`);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import TimelineView from '../TimelineView';
+import TimelineView from '../TimelineView'; // Update this if needed
 import HydrationDrawer from '../HydrationDrawer';
+import ProfileSection from '../ProfileSection';
+import HydrationStatus from '../HydrationStatus';
 
 // Types from SessionManager
 interface SessionMetadata {
@@ -161,46 +163,21 @@ const LogsView: React.FC<LogsViewProps> = ({
       
       {/* Tracking View */}
       {viewMode === 'tracking' && (
-        <>
-          {/* Hydration Status Dashboard */}
-          <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <div className="circular-progress bg-blue-100 rounded-full h-24 w-24 flex items-center justify-center relative overflow-hidden">
-                  <div 
-                    className="absolute bottom-0 left-0 right-0 bg-blue-500 transition-all duration-500"
-                    style={{ height: `${percentComplete}%` }}
-                  />
-                  <div className="text-center z-10">
-                    <div className="percentage font-bold text-xl">{percentComplete}%</div>
-                    <div className="label text-sm">Hydrated</div>
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="font-semibold text-lg">Today's Intake</div>
-                  <div className="text-3xl font-bold">{totalIntake} <span className="text-lg">ml</span></div>
-                  <div className="text-sm text-gray-500">Goal: {dailyGoal} ml</div>
-                </div>
-              </div>
-              
-              <div className="metrics grid grid-cols-1 gap-2">
-                <div className="metric bg-gray-50 p-2 rounded text-center">
-                  <span className="label block text-gray-600 text-sm">Projected Loss</span>
-                  <span className="value font-bold">{hydrationData?.projectedLossSoFar || 0} ml</span>
-                </div>
-                <div className="metric bg-gray-50 p-2 rounded text-center">
-                  <span className="label block text-gray-600 text-sm">Balance</span>
-                  <span className={`value font-bold ${deficit > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                    {deficit > 0 ? `-${deficit}` : `+${Math.abs(deficit)}`} ml
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="tracking-view">
+          {/* Hydration Status Component */}
+          <HydrationStatus 
+            currentIntake={totalIntake}
+            goal={dailyGoal}
+            projectedLoss={metadata?.projected_losses?.projected_loss_so_far_ml || 0}
+            balance={metadata?.deficits?.water_ml || 0}
+            onViewRecommendations={onViewRecommendations}
+          />
+          
+          {/* Profile Section */}
+          <ProfileSection userId={userProfile?.id || ''} />
           
           {/* Logging Interface with Timeline and Drawer */}
-          <div className="flex flex-col md:flex-row gap-4 mt-6">
+          <div className="flex flex-col md:flex-row gap-4 mt-4">
             {/* Timeline Column */}
             <div className="w-full md:w-2/3">
               <TimelineView 

@@ -47,63 +47,58 @@ const VideoModal: React.FC<VideoModalProps> = ({
     setSelectedVideoUrl(videoUrl);
   }, [videoId, videoUrl]);
 
-  // Find a video by tag
+  // Find a video by tag - simplified for testing
   const findVideoByTag = async (tag: string) => {
     try {
-      // Split multiple tags if they're comma-separated
-      const tagList = tag.split(',').map(t => t.trim());
-      let query = supabase
+      console.log(`Searching for videos with tag: ${tag}`);
+      
+      // Simplify search to just use a simple contains check
+      const { data, error } = await supabase
         .from("videos")
         .select("*");
+      
+      if (error) {
+        console.error("Error fetching videos:", error);
+        return;
+      }
+      
+      console.log(`Found ${data?.length || 0} total videos`);
+      
+      // Find videos that match our tag or contain it
+      let matchingVideos = [];
+      
+      if (data && data.length > 0) {
+        // First try: look for exact tag matches
+        matchingVideos = data.filter(video => {
+          const videoTags = video.tags || [];
+          return videoTags.includes(tag);
+        });
         
-      // If we have multiple tags, check for videos that match ALL specified tags
-      // This is more targeted than just looking for one of them
-      if (tagList.length > 1) {
-        // First check for videos that match BOTH tags (more specific match)
-        // The ?& operator checks if the JSON array contains ALL elements
-        let matchedVideos = [];
+        console.log(`Found ${matchingVideos.length} videos with exact tag match`);
         
-        // Try to find the perfect match first (both session type and character type)
-        for (const t of tagList) {
-          query = query.filter('tags', 'cs', `["${t}"]`);
+        // If no exact matches, try to find videos with any tag that contains our tag string
+        if (matchingVideos.length === 0) {
+          matchingVideos = data.filter(video => {
+            const videoTags = video.tags || [];
+            return videoTags.some((t: string) => t && t.includes(tag));
+          });
+          console.log(`Found ${matchingVideos.length} videos with partial tag match`);
         }
-        const { data: perfectMatches } = await query;
         
-        if (perfectMatches && perfectMatches.length > 0) {
-          matchedVideos = perfectMatches;
-        } else {
-          // Fall back to any video that matches at least the first tag (session context)
-          const { data: fallbackMatches } = await supabase
-            .from("videos")
-            .select("*")
-            .filter('tags', 'cs', `["${tagList[0]}"]`);
-            
-          if (fallbackMatches && fallbackMatches.length > 0) {
-            matchedVideos = fallbackMatches;
-          }
+        // Still no matches? Just use the first video as fallback
+        if (matchingVideos.length === 0) {
+          matchingVideos = data.slice(0, 1);
+          console.log(`No matching videos found. Using first video as fallback.`);
         }
         
-        if (matchedVideos.length > 0) {
-          // Pick a random video from the matches
-          const randomIndex = Math.floor(Math.random() * matchedVideos.length);
-          setSelectedVideoId(matchedVideos[randomIndex].id);
-        } else {
-          console.log(`No videos found with tags: ${tagList.join(', ')}`);
-        }
+        // Pick a random video from the matches
+        const randomIndex = Math.floor(Math.random() * matchingVideos.length);
+        const selectedVideo = matchingVideos[randomIndex];
+        console.log(`Selected video: ${selectedVideo.title || 'Untitled'}`);
+        
+        setSelectedVideoId(selectedVideo.id);
       } else {
-        // Single tag search
-        const { data } = await supabase
-          .from("videos")
-          .select("*")
-          .filter('tags', 'cs', `["${tag}"]`);
-          
-        if (data && data.length > 0) {
-          // Pick a random video from the results
-          const randomIndex = Math.floor(Math.random() * data.length);
-          setSelectedVideoId(data[randomIndex].id);
-        } else {
-          console.log(`No videos found with tag: ${tag}`);
-        }
+        console.log(`No videos found in the database`);
       }
     } catch (error) {
       console.error("Error in findVideoByTag:", error);

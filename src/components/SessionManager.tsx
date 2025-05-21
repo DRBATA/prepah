@@ -66,16 +66,18 @@ const SessionManager: React.FC<SessionManagerProps> = ({
   // Show appropriate video when session state changes
   useEffect(() => {
     if (sessionId && !videoModal.videoLoaded) {
-      const videoTag = isNewSession ? "new_session" : "continue_session";
-      
-      // Combine session context tag with character preference
-      const combinedTags = [videoTag, preferredCharacterType];
-      
-      setVideoModal({
-        isOpen: true,
-        videoTag: combinedTags.join(","),
-        videoLoaded: true
-      });
+      // Force a small delay to ensure UI is ready
+      setTimeout(() => {
+        const videoTag = isNewSession ? "new_session" : "continue_session";
+        console.log(`Playing ${videoTag} video for character: ${preferredCharacterType}`);
+        
+        // Temporarily simplify to ensure at least one video plays
+        setVideoModal({
+          isOpen: true,
+          videoTag: videoTag, // Just use the session type for now
+          videoLoaded: true
+        });
+      }, 1000); // Small delay to ensure components are ready
     }
   }, [sessionId, isNewSession, preferredCharacterType, videoModal.videoLoaded]);
 
