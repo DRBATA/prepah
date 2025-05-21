@@ -1,643 +1,234 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import './styles.css';
-
-// Import our components
-import { LoginForm, RegisterForm, ResetPasswordForm, UpdatePasswordForm, WaterBarLogo } from './components/AuthComponents';
-import NavBar, { ViewTabs } from './components/NavBar';
-import LogsView from './components/views/LogsView';
-import RecommendationsView from './components/views/RecommendationsView';
-import ActionsView from './components/views/ActionsView';
-import SessionManager from './components/SessionManager';
+import { createClient, Session } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hmwrlhepsmyvqwkfleck.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(
+  'https://hmwrlhepsmyvqwkfleck.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc'
+);
 
-function App() {
-  // Authentication state
-  const [loading, setLoading] = useState(false);
-  const [loadingSession, setLoadingSession] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [session, setSession] = useState<any>(null);
-  const [loginError, setLoginError] = useState('');
-  
-  // Authentication view state
-  const [authView, setAuthView] = useState<'sign_in' | 'sign_up' | 'forgotten_password' | 'update_password'>('sign_in');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [changeSuccess, setChangeSuccess] = useState(false);
-  
-  // Main app state
-  const [view, setView] = useState<'logs' | 'recommendations' | 'actions'>('logs');
-  const [hydrationData, setHydrationData] = useState<any>(null);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [selectedActions, setSelectedActions] = useState<any[]>([]);
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
-  const [nearbyVenues, setNearbyVenues] = useState<any[]>([]);
-  const [recommendedProducts, setRecommendedProducts] = useState<any[]>([]);
-  const [userPoints, setUserPoints] = useState(0);
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
-  // Handle session management
+export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     // Get initial session
-    const getInitialSession = async () => {
-      setLoadingSession(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    setIsLoading(true);
+    setInput('');
+    
+    // Add user message
+    const userMessage: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+          userId: session?.user?.id
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to get response');
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      let assistantMessage: Message = { role: 'assistant', content: '' };
       
-      try {
-        const { data, error } = await supabase.auth.getSession();
+      setMessages(prev => [...prev, assistantMessage]);
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Decode and handle chunks
+        const text = new TextDecoder().decode(value);
+        const lines = text.split('\\n');
         
-        if (error) {
-          console.error('Error getting session:', error.message);
-        } else if (data?.session) {
-          setSession(data.session);
-          setUser(data.session.user);
-          
-          // Fetch initial hydration data
-          try {
-            const { data: hydrationData, error: hydrationError } = await supabase
-              .from('hydration_data')
-              .select('*')
-              .eq('user_id', data.session.user.id)
-              .single(); // Use .single() since we expect one record
-
-            if (hydrationError) throw hydrationError;
-            if (!hydrationData) throw new Error('No hydration data found');
-
-            setHydrationData(hydrationData);
-            setSessionId(hydrationData.session_id);
-          
-          // For demo purposes, set some sample data
-          setUserPoints(750);
-          setNearbyVenues([
-            {
-              id: 'venue_1',
-              name: 'The Water Bar',
-              type: 'Hydration Station',
-              rating: 4.8,
-              distance: '500m'
-            },
-            {
-              id: 'venue_2',
-              name: 'Hydration Hub',
-              type: 'Wellness Café',
-              rating: 4.5,
-              distance: '800m'
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                assistantMessage.content += data.content;
+                // Force a re-render with new content
+                setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
+              }
+            } catch (e) {
+              console.log('Message:', line.slice(6));
             }
-          ]);
-          setRecommendedProducts([
-            {
-              id: 'product_1',
-              name: 'Premium Mineral Water',
-              brand: 'Perrier',
-              price: 15,
-              points: 15,
-              description: 'Naturally carbonated mineral water with a refreshing taste.'
-            },
-            {
-              id: 'product_2',
-              name: 'Hydration Bundle',
-              brand: 'Water Bar',
-              price: 60,
-              points: 75,
-              description: 'Complete hydration pack with water, electrolytes, and protein.'
-            }
-          ]);
-          } catch (error) {
-            console.error('Error fetching initial data:', error);
           }
         }
-      } catch (error) {
-        console.error('Error in session management:', error);
-      } finally {
-        setLoadingSession(false);
       }
-    };
-    
-    getInitialSession();
-    
-    // Add window beforeunload event listener for auto-logout
-    const handleBeforeUnload = () => {
-      if (sessionStorage.getItem('auto-logout') === 'true') {
-        supabase.auth.signOut();
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-      if (event === 'SIGNED_IN' && newSession) {
-        setSession(newSession);
-        setUser(newSession.user);
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        setHydrationData(null);
-      }
+    } catch (error) {
+      console.error('Error:', error);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Sorry, I had trouble responding. Please try again.'
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignIn = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
     });
-    
-    // Check URL for reset password params
-    async function checkForRecovery() {
-      const hash = window.location.hash;
-      
-      if (hash && hash.substring(1).includes('type=recovery')) {
-        setAuthView('update_password');
-      }
-    }
-    
-    checkForRecovery();
-    
-    // Return a cleanup function that removes event listeners and unsubscribes
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      subscription.unsubscribe();
-    };
-  }, []);
-  
-  // Authentication handlers
-  const handleLogin = async (email: string, password: string, rememberMe: boolean) => {
-    try {
-      setLoading(true);
-      setLoginError('');
-      
-      // Sign in the user
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (error) {
-        throw error;
-      }
-      
-      // If "Remember me" is not checked, we'll clear the session when the browser closes
-      if (!rememberMe) {
-        // Store this in session storage so we know to log out on window close
-        sessionStorage.setItem('auto-logout', 'true');
-      } else {
-        sessionStorage.removeItem('auto-logout');
-      }
-      
-      // Set session and user state
-      setSession(data.session);
-      setUser(data.user);
-    } catch (error: any) {
-      console.error('Error logging in:', error);
-      setLoginError(error.message || 'Error logging in');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleRegistration = async (email: string, password: string, confirmPassword: string) => {
-    if (password !== confirmPassword) {
-      setLoginError("Passwords don't match");
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setLoginError('');
-      
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password
-      });
-      
-      if (error) {
-        setLoginError(error.message);
-        return;
-      }
-      
-      // Check if email confirmation is required
-      if (data?.user?.identities?.length === 0) {
-        setLoginError('This email is already registered');
-        return;
-      }
-      
-      // Success - either logged in or confirmation email sent
-      if (data?.user?.confirmed_at) {
-        // User is confirmed, session will be set by onAuthStateChange
-      } else {
-        setLoginError('Please check your email for confirmation link');
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      setLoginError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleResetPassword = async (email: string) => {
-    try {
-      setLoading(true);
-      setLoginError('');
-      
-      const { data, error } = await supabase.auth.resetPasswordForEmail(email);
-      
-      if (error) {
-        setLoginError(error.message);
-        return;
-      }
-      
-      // Success - reset email sent
-      setResetSent(true);
-    } catch (error) {
-      console.error('Password reset error:', error);
-      setLoginError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleUpdatePassword = async (password: string) => {
-    try {
-      setLoading(true);
-      setLoginError('');
-      
-      const { data, error } = await supabase.auth.updateUser({
-        password
-      });
-      
-      if (error) {
-        setLoginError(error.message);
-        return;
-      }
-      
-      // Success - password updated
-      setAuthView('sign_in');
-    } catch (error) {
-      console.error('Password update error:', error);
-      setLoginError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      // Session will be cleared by onAuthStateChange
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-  
-  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
-    try {
-      setLoading(true);
-      setLoginError('');
-      
-      // First sign in to verify current password
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword
-      });
-      
-      if (signInError) {
-        setLoginError('Current password is incorrect');
-        setLoading(false);
-        return;
-      }
-      
-      // Then update password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-      
-      if (updateError) {
-        setLoginError(updateError.message);
-        setLoading(false);
-        return;
-      }
-      
-      // Success - password updated
-      setChangeSuccess(true);
-      setTimeout(() => {
-        setIsChangingPassword(false);
-        setChangeSuccess(false);
-      }, 3000);
-    } catch (error) {
-      console.error('Password change error:', error);
-      setLoginError('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // View toggle handlers
-  const handleViewChange = async (newView: 'logs' | 'recommendations' | 'actions') => {
-    setView(newView);
-    
-    // Fetch data for the selected view
-    if (newView === 'recommendations' && session) {
-      const { data: recommendationsData, error: recommendationsError } = await supabase
-        .from('recommendations')
-        .select('*')
-        .eq('user_id', session.user.id);
 
-      if (recommendationsError) {
-        console.error('Error fetching recommendations:', recommendationsError);
-        return;
-      }
-
-      setRecommendations(recommendationsData || []);
+    if (error) {
+      console.error('Error sending magic link:', error.message);
+    } else {
+      alert('Check your email for the magic link!');
     }
   };
-  
-  // Action handlers
-  const handleLogHydration = async (amount: number, type: string) => {
-    if (!session) return;
-    
-    try {
-      const { data: hydrationData, error: hydrationError } = await supabase
-        .from('hydration_data')
-        .insert({
-          user_id: session.user.id,
-          amount,
-          type
-        });
 
-      if (hydrationError) throw hydrationError;
-      if (!hydrationData) throw new Error('Failed to log hydration');
-
-      setHydrationData(hydrationData);
-    } catch (error) {
-      console.error('Error logging hydration:', error);
-    }
-  };
-  
-  const handleLogActivity = async (activity: string, duration: number) => {
-    // Similar to handleLogHydration but for activities
-    console.log(`Logging activity: ${activity} for ${duration} minutes`);
-  };
-  
-  const handleSelectRecommendation = async (recommendation: any) => {
-    if (!session) return;
-    
-    try {
-      const { data: selectionData, error: selectionError } = await supabase
-        .from('selected_recommendations')
-        .insert({
-          user_id: session.user.id,
-          recommendation_id: recommendation.id
-        });
-
-      if (selectionError) throw selectionError;
-      if (!selectionData) throw new Error('Failed to select recommendation');
-
-      // Add the selected recommendation to the actions
-      setSelectedActions(prev => [...prev, {
-        recommendation_id: recommendation.id,
-        completed: false
-      }]);
-
-      // Automatically switch to the actions view
-      setView('actions');
-    } catch (error) {
-      console.error('Error selecting recommendation:', error);
-    }
-  };
-  
-  const handleCompleteAction = async (actionId: string) => {
-    if (!session) return;
-    
-    try {
-      const { data: updateData, error: updateError } = await supabase
-        .from('actions')
-        .update({
-          completed: true
-        })
-        .eq('id', actionId);
-
-      if (updateError) throw updateError;
-      if (!updateData) throw new Error('Failed to update action');
-
-      // Mark the action as completed
-      setSelectedActions(prev => prev.map(action => 
-        action.id === actionId ? { ...action, completed: true } : action
-      ));
-
-      // Update hydration data
-      setHydrationData(updateData);
-    } catch (error) {
-      console.error('Error completing action:', error);
-    }
-  };
-  
-  const handlePurchaseProduct = async (productId: string) => {
-    // In a real app, this would process the purchase
-    console.log(`Purchasing product: ${productId}`);
-    
-    // For demo purposes, just add it to selected actions
-    const product = recommendedProducts.find(p => p.id === productId);
-    if (product) {
-      setSelectedActions(prev => [...prev, {
-        id: `action_${Date.now()}`,
-        type: 'buy_product',
-        title: `Buy ${product.name}`,
-        description: product.description,
-        price: product.price,
-        points: product.points,
-        completed: false
-      }]);
-    }
-  };
-  
-  // Login/Registration view
   if (!session) {
-    if (authView === 'update_password') {
-      return (
-        <div className="container">
-          <div className="auth-container">
-            <WaterBarLogo />
-            <UpdatePasswordForm 
-              onUpdatePassword={handleUpdatePassword}
-              error={loginError}
-            />
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              Welcome to WaterBar
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Sign in to get personalized hydration advice
+            </p>
           </div>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="container">
-        <div className="auth-container">
-          <WaterBarLogo />
-          
-          {isRegistering ? (
-            <RegisterForm 
-              onRegister={handleRegistration}
-              onToggleLogin={() => {
-                setIsRegistering(false);
-                setLoginError('');
-              }}
-              error={loginError}
-            />
-          ) : isResetting ? (
-            <ResetPasswordForm 
-              onReset={handleResetPassword}
-              onToggleLogin={() => {
-                setIsResetting(false);
-                setResetSent(false);
-                setLoginError('');
-              }}
-              resetSent={resetSent}
-              error={loginError}
-            />
-          ) : (
-            <LoginForm 
-              onLogin={(email, password, rememberMe) => handleLogin(email, password, rememberMe)}
-              onToggleRegister={() => {
-                setIsRegistering(true);
-                setLoginError('');
-              }}
-              onToggleReset={() => {
-                setIsResetting(true);
-                setLoginError('');
-              }}
-              error={loginError}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
-  
-  // Loading state
-  if (loadingSession) {
-    return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading your hydration data...</p>
-      </div>
-    );
-  }
-  
-  // Main application view
-  return (
-    <div className="container">
-      <NavBar 
-        currentView={view}
-        onChangeView={handleViewChange}
-        onLogout={handleLogout}
-        onChangePassword={() => setIsChangingPassword(!isChangingPassword)}
-        userEmail={user?.email}
-      />
-      
-      {/* Password Change Form */}
-      {isChangingPassword && (
-        <div className="card" style={{ maxWidth: '500px', margin: '20px auto 30px' }}>
-          <h2 className="auth-title">Change Password</h2>
-          
-          {loginError && (
-            <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', textAlign: 'center' }}>
-              {loginError}
-            </div>
-          )}
-          
-          {changeSuccess && (
-            <div className="success-message" style={{ color: 'var(--success)', marginBottom: '1rem', textAlign: 'center' }}>
-              Password updated successfully!
-            </div>
-          )}
-          
-          <form onSubmit={(e) => {
+          <form className="mt-8 space-y-6" onSubmit={(e: React.FormEvent) => {
             e.preventDefault();
-            const currentPassword = (e.target as any).currentPassword.value;
-            const newPassword = (e.target as any).newPassword.value;
-            const confirmNewPassword = (e.target as any).confirmNewPassword.value;
-            
-            if (newPassword !== confirmNewPassword) {
-              setLoginError("New passwords don't match");
-              return;
-            }
-            
-            handleChangePassword(currentPassword, newPassword);
+            const formData = new FormData(e.target as HTMLFormElement);
+            const email = formData.get('email') as string;
+            handleSignIn(email);
           }}>
-            <div className="form-group">
-              <label htmlFor="currentPassword">Current Password</label>
-              <input
-                id="currentPassword"
-                type="password"
-                required
-              />
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <label htmlFor="email-address" className="sr-only">
+                  Email address
+                </label>
+                <input
+                  id="email-address"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md rounded-b-md focus:outline-none focus:ring-cyan-500 focus:border-cyan-500 focus:z-10 sm:text-sm"
+                  placeholder="Email address"
+                />
+              </div>
             </div>
-            
-            <div className="form-group">
-              <label htmlFor="newPassword">New Password</label>
-              <input
-                id="newPassword"
-                type="password"
-                required
-                minLength={6}
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="confirmNewPassword">Confirm New Password</label>
-              <input
-                id="confirmNewPassword"
-                type="password"
-                required
-                minLength={6}
-              />
-            </div>
-            
-            <div className="form-buttons">
-              <button type="button" className="button text" onClick={() => setIsChangingPassword(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="button primary" disabled={loading}>
-                {loading ? 'Updating...' : 'Update Password'}
+
+            <div>
+              <button
+                type="submit"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500"
+              >
+                Sign in with Magic Link
               </button>
             </div>
           </form>
         </div>
-      )}
-      
-      {/* View Tabs */}
-      <ViewTabs 
-        currentView={view}
-        onChangeView={handleViewChange}
-      />
-      
-      {/* View Components */}
-      {view === 'logs' && (
-        <SessionManager 
-          userId={user?.id || ''}
-          preferredCharacterType={user?.character_preference || 'type1'}
-        />
-      )}
-      
-      {view === 'recommendations' && (
-        <RecommendationsView 
-          userProfile={user}
-          hydrationData={hydrationData}
-          weatherData={{ location: 'Dubai Marina', temperature: '35°C', humidity: '65%' }}
-          recommendations={recommendations}
-          onSelectRecommendation={handleSelectRecommendation}
-        />
-      )}
-      
-      {view === 'actions' && (
-        <ActionsView 
-          userProfile={user}
-          selectedActions={selectedActions}
-          nearbyVenues={nearbyVenues}
-          recommendedProducts={recommendedProducts}
-          userPoints={userPoints}
-          onCompleteAction={handleCompleteAction}
-          onPurchaseProduct={handlePurchaseProduct}
-        />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            Sign out
+          </button>
+        </div>
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          {/* Messages */}
+          <div className="p-4 h-[600px] overflow-y-auto space-y-4">
+            {messages.map((message, i) => (
+              <div
+                key={i}
+                className={`flex ${
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    message.role === 'user'
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  <pre className="whitespace-pre-wrap font-sans">
+                    {message.content}
+                  </pre>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 rounded-lg p-3 max-w-[80%]">
+                  <div className="animate-pulse flex space-x-2">
+                    <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                    <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                    <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Input form */}
+          <div className="border-t border-gray-200 p-4">
+            <form onSubmit={handleSubmit} className="flex space-x-4">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask about hydration..."
+                className="flex-1 rounded-lg border border-gray-300 focus:ring-2 focus:ring-cyan-500 focus:border-transparent px-4 py-2"
+              />
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="bg-cyan-600 text-white px-6 py-2 rounded-lg hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50"
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-
-export default App;

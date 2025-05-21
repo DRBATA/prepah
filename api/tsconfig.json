@@ -10,5 +10,5 @@
     "noEmit": false,
     "outDir": ".vercel_build_output"
   },
-  "include": ["*.ts"]
+  "include": ["**/*.ts", "**/*.tsx"]
 }

@@ -1,17 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { SupabaseClient } from "@supabase/supabase-js";
 import VideoModal from "./VideoModal";
 import LogsView from "./views/LogsView";
 
-// Initialize Supabase client
-const supabaseUrl = "https://hmwrlhepsmyvqwkfleck.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc";
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 interface SessionManagerProps {
   userId: string;
+  onSessionStart: (sessionId: string) => void;
+  supabase: SupabaseClient;
   preferredCharacterType?: "type1" | "type2" | "type3"; // User's preferred character/presenter
 }
 
@@ -38,6 +35,8 @@ interface SessionMetadata {
 
 const SessionManager: React.FC<SessionManagerProps> = ({
   userId,
+  onSessionStart,
+  supabase,
   preferredCharacterType = "type1" // Default to type1 if not specified
 }) => {
   const [loading, setLoading] = useState(true);
