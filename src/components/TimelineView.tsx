@@ -301,6 +301,26 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     setDraggingEvent(event);
   };
 
+  // Handle timeline click
+  const handleTimelineClick = (e: React.MouseEvent) => {
+    if (timelineRef.current) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const relativeY = e.clientY - rect.top;
+      const totalHeight = rect.height;
+
+      // Calculate hour based on position (24 hours)
+      const hour = Math.floor((relativeY / totalHeight) * 24);
+      const minute = Math.floor(((relativeY / totalHeight) * 24 * 60) % 60);
+
+      // Format as HH:MM
+      const clickedTime = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+      
+      // Set the time and open modal
+      setNewEventTime(clickedTime);
+      setShowAddModal(true);
+    }
+  };
+
   // Handle drag over
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -452,9 +472,10 @@ const TimelineView: React.FC<TimelineViewProps> = ({
         <div className="p-4 pt-0">
           <div
             ref={timelineRef}
-            className="relative h-[600px] border-l border-gray-700 ml-6"
+            className="relative h-[600px] border-l border-gray-700 ml-6 cursor-pointer"
             onDragOver={handleDragOver}
             onDrop={handleExternalDrop}
+            onClick={handleTimelineClick}
           >
             {/* Hour markers */}
             {Array.from({ length: 24 }).map((_, i) => (
@@ -536,17 +557,18 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Drag indicator */}
-          <div
-            id="drag-indicator"
-            className="absolute left-0 right-0 flex items-center pointer-events-none hidden"
-            style={{ zIndex: 20 }}
-          >
-            <div className="w-3 h-3 rounded-full bg-white -ml-1.5"></div>
-            <div className="ml-4 px-2 py-1 rounded bg-white/20 text-xs">12:00</div>
+
+            {/* Drag indicator */}
+            <div
+              id="drag-indicator"
+              className="absolute left-0 right-0 flex items-center pointer-events-none hidden"
+              style={{ zIndex: 20 }}
+            >
+              <div className="w-3 h-3 rounded-full bg-white -ml-1.5"></div>
+              <div className="ml-4 px-2 py-1 rounded bg-white/20 text-xs">12:00</div>
+            </div>
           </div>
         </div>
       </div>
