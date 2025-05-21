@@ -22,6 +22,11 @@ export default function App() {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      
+      // If user is logged in, send initial welcome request
+      if (session?.user?.id) {
+        sendWelcomeMessage(session.user.id);
+      }
     });
 
     // Listen for auth changes
@@ -29,10 +34,46 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      
+      // If user just logged in, send initial welcome request
+      if (_event === 'SIGNED_IN' && session?.user?.id) {
+        sendWelcomeMessage(session.user.id);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+  
+  // Function to send welcome message when user logs in
+  const sendWelcomeMessage = async (userId: string) => {
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userId
+          // No message means it will use the default welcome message
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to get welcome response');
+      
+      const data = await response.json();
+      
+      // Add assistant message with welcome
+      setMessages([{ role: 'assistant', content: data.message }]);
+    } catch (error) {
+      console.error('Error getting welcome message:', error);
+      setMessages([{ 
+        role: 'assistant', 
+        content: 'Welcome to The Water Bar! How can I help with your hydration today?'
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,42 +91,19 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          message: userMessage.content,
           userId: session?.user?.id
         })
       });
 
       if (!response.ok) throw new Error('Failed to get response');
 
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      let assistantMessage: Message = { role: 'assistant', content: '' };
+      // Parse the JSON response
+      const data = await response.json();
       
+      // Add assistant message
+      const assistantMessage: Message = { role: 'assistant', content: data.message };
       setMessages(prev => [...prev, assistantMessage]);
-
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        // Decode and handle chunks
-        const text = new TextDecoder().decode(value);
-        const lines = text.split('\\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                assistantMessage.content += data.content;
-                // Force a re-render with new content
-                setMessages(prev => [...prev.slice(0, -1), { ...assistantMessage }]);
-              }
-            } catch (e) {
-              console.log('Message:', line.slice(6));
-            }
-          }
-        }
-      }
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { 

@@ -168,11 +168,13 @@ Your immediate priority is to welcome the user, confirm their identity, and chec
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    console.log('POST request received');
     const { userId, message }: { userId: string; message?: string } = await request.json();
+    console.log('Request data:', { userId, message: message || 'Welcome message' });
     
     // Create Responses API call with both tools available
     const response = await openai.responses.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4.1-mini',
       instructions: SYSTEM_PROMPT,
       input: message || 'Welcome to The Water Bar',
       // Use tools instead of functions for this SDK version
@@ -212,6 +214,7 @@ export async function POST(request: Request): Promise<Response> {
       
       // Submit the tool result back to the API
       const followUpResponse = await openai.responses.create({
+        model: 'gpt-4.1-mini',
         previous_response_id: response.id,
         tool_outputs: [
           {
@@ -227,15 +230,12 @@ export async function POST(request: Request): Promise<Response> {
       } as any);
       
       // Return the final response
-      return new Response(
-        JSON.stringify({
-          message: followUpResponse.output_text,
-          response_id: followUpResponse.id
-        }),
-        {
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      return new Response(JSON.stringify({
+        message: followUpResponse.text,
+        response_id: followUpResponse.id
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     
     // Return the response if no tool calls
@@ -250,10 +250,18 @@ export async function POST(request: Request): Promise<Response> {
     );
   } catch (error) {
     console.error('Error in POST handler:', error);
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }), 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Sorry, I had trouble responding. Please try again.'
+      }),
       { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
