@@ -62,7 +62,7 @@ Weight-kg : ${profile?.weight_kg ?? 'Missing'}
   `;
 
   const ai = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',            // cheap, fast
+    model: 'gpt-4',            // Standard GPT-4 model
     messages: [
       { role: 'system', content: systemPrompt.trim() },
       {
