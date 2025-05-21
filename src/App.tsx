@@ -10,9 +10,6 @@ import RecommendationsView from './components/views/RecommendationsView';
 import ActionsView from './components/views/ActionsView';
 import SessionManager from './components/SessionManager';
 
-// Import API client
-import { fetchHydrationData, logHydration, fetchRecommendations, selectRecommendation, completeAction } from './api/api-client';
-
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hmwrlhepsmyvqwkfleck.supabase.co";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhtd3JsaGVwc215dnF3a2ZsZWNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUyMDExNDAsImV4cCI6MjA2MDc3NzE0MH0.oyMGM5NGU2mLFDYxwuzXxXXVeKojzhdcbRimgME3Ogc";
@@ -39,7 +36,6 @@ function App() {
   const [hydrationData, setHydrationData] = useState<any>(null);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [selectedActions, setSelectedActions] = useState<any[]>([]);
-  const [previousResponseId, setPreviousResponseId] = useState<string | undefined>(undefined);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [nearbyVenues, setNearbyVenues] = useState<any[]>([]);
   const [recommendedProducts, setRecommendedProducts] = useState<any[]>([]);
@@ -62,10 +58,17 @@ function App() {
           
           // Fetch initial hydration data
           try {
-            const hydrationResponse = await fetchHydrationData(data.session.access_token);
-            setHydrationData(hydrationResponse);
-            setPreviousResponseId(hydrationResponse.response_id);
-            setSessionId(hydrationResponse.session_id);
+            const { data: hydrationData, error: hydrationError } = await supabase
+              .from('hydration_data')
+              .select('*')
+              .eq('user_id', data.session.user.id)
+              .single(); // Use .single() since we expect one record
+
+            if (hydrationError) throw hydrationError;
+            if (!hydrationData) throw new Error('No hydration data found');
+
+            setHydrationData(hydrationData);
+            setSessionId(hydrationData.session_id);
           
           // For demo purposes, set some sample data
           setUserPoints(750);
@@ -328,17 +331,22 @@ function App() {
   };
   
   // View toggle handlers
-  const handleViewChange = (newView: 'logs' | 'recommendations' | 'actions') => {
+  const handleViewChange = async (newView: 'logs' | 'recommendations' | 'actions') => {
     setView(newView);
     
     // Fetch data for the selected view
     if (newView === 'recommendations' && session) {
-      fetchRecommendations(session.access_token, previousResponseId || undefined, sessionId || undefined)
-        .then(data => {
-          setRecommendations(data.recommendations || []);
-          setPreviousResponseId(data.response_id);
-        })
-        .catch(error => console.error('Error fetching recommendations:', error));
+      const { data: recommendationsData, error: recommendationsError } = await supabase
+        .from('recommendations')
+        .select('*')
+        .eq('user_id', session.user.id);
+
+      if (recommendationsError) {
+        console.error('Error fetching recommendations:', recommendationsError);
+        return;
+      }
+
+      setRecommendations(recommendationsData || []);
     }
   };
   
@@ -347,16 +355,18 @@ function App() {
     if (!session) return;
     
     try {
-      const response = await logHydration(
-        session.access_token, 
-        amount, 
-        type, 
-        previousResponseId || undefined, 
-        sessionId || undefined
-      );
-      
-      setHydrationData(response);
-      setPreviousResponseId(response.response_id);
+      const { data: hydrationData, error: hydrationError } = await supabase
+        .from('hydration_data')
+        .insert({
+          user_id: session.user.id,
+          amount,
+          type
+        });
+
+      if (hydrationError) throw hydrationError;
+      if (!hydrationData) throw new Error('Failed to log hydration');
+
+      setHydrationData(hydrationData);
     } catch (error) {
       console.error('Error logging hydration:', error);
     }
@@ -371,21 +381,22 @@ function App() {
     if (!session) return;
     
     try {
-      const response = await selectRecommendation(
-        session.access_token,
-        recommendation.id,
-        previousResponseId || undefined,
-        sessionId || undefined
-      );
-      
+      const { data: selectionData, error: selectionError } = await supabase
+        .from('selected_recommendations')
+        .insert({
+          user_id: session.user.id,
+          recommendation_id: recommendation.id
+        });
+
+      if (selectionError) throw selectionError;
+      if (!selectionData) throw new Error('Failed to select recommendation');
+
       // Add the selected recommendation to the actions
       setSelectedActions(prev => [...prev, {
-        ...recommendation,
+        recommendation_id: recommendation.id,
         completed: false
       }]);
-      
-      setPreviousResponseId(response.response_id);
-      
+
       // Automatically switch to the actions view
       setView('actions');
     } catch (error) {
@@ -397,21 +408,23 @@ function App() {
     if (!session) return;
     
     try {
-      const response = await completeAction(
-        session.access_token,
-        actionId,
-        previousResponseId || undefined,
-        sessionId || undefined
-      );
-      
+      const { data: updateData, error: updateError } = await supabase
+        .from('actions')
+        .update({
+          completed: true
+        })
+        .eq('id', actionId);
+
+      if (updateError) throw updateError;
+      if (!updateData) throw new Error('Failed to update action');
+
       // Mark the action as completed
       setSelectedActions(prev => prev.map(action => 
         action.id === actionId ? { ...action, completed: true } : action
       ));
-      
+
       // Update hydration data
-      setHydrationData(response.hydrationData || hydrationData);
-      setPreviousResponseId(response.response_id);
+      setHydrationData(updateData);
     } catch (error) {
       console.error('Error completing action:', error);
     }
