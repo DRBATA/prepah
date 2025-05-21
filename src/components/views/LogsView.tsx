@@ -226,7 +226,7 @@ const LogsView: React.FC<LogsViewProps> = ({
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
       
       {/* Recommendations View */}
