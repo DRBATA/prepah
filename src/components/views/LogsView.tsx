@@ -139,9 +139,6 @@ const LogsView: React.FC<LogsViewProps> = ({
     <div className="view-container logs-view">
       {/* Top nav to switch between tracking and recommendations */}
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">
-          {viewMode === 'tracking' ? 'Hydration Status' : 'Recommendations'}
-        </h2>
         <div>
           {viewMode === 'tracking' ? (
             <button 
